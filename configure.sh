@@ -29,9 +29,9 @@ if [ -d "pisces_env" ]; then
 else
   echo "Warning: Virtual environment 'pisces_env' not found."
   python3 -m venv pisces_env
+  source pisces_env/bin/activate
   echo "Virtual environment created."
 fi
-
 if [ -f "requirements.txt" ]; then
   echo "requirements.txt found. Installing dependencies..."
   pip install -r requirements.txt
