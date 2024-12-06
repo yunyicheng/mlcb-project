@@ -8,6 +8,8 @@ import gzip
 import shutil
 import networkx as nx
 import matplotlib.pyplot as plt
+import mapGRN
+import preprocessing
 
 from config import *
 
@@ -125,7 +127,9 @@ interaction_file = DATADIR / "STRING/10090.protein.links.full.v12.0.txt"
 info_file = DATADIR / "STRING/10090.protein.info.v12.0.txt"
 aliases_file = DATADIR / "STRING/10090.protein.aliases.v12.0.txt"
 
-adata = sc.read_h5ad(DATADIR / "expression_matrices/MERFISH-C57BL6J-638850/20230830/C57BL6J-638850-log2.h5ad")
+adata, gene, cell_extended, cluster_details, cluster_colors = preprocessing.load_data()
+   
+# adata = sc.read_h5ad(DATADIR / "expression_matrices/MERFISH-C57BL6J-638850/20230830/C57BL6J-638850-log2.h5ad")
 load_protein_protein_interaction_data(adata, interaction_file, info_file, aliases_file)
 adata.write(DATADIR /"Intermediate/merfish_w_ppi.h5ad")
 # print(adata.var.head()) 

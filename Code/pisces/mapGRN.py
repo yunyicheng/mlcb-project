@@ -3,8 +3,9 @@ import scanpy as sc
 import requests
 from pathlib import Path
 import requests
+import preprocessing
 
-from .config import *
+from config import *
 
 # download GRN data
 def download_trrust_data(url, output_file):
@@ -30,7 +31,8 @@ def load_data():
 
 def map_grn():
     # Load MERFISH data and TRRUST data
-    adata = sc.read_h5ad(DATADIR / "expression_matrices/MERFISH-C57BL6J-638850/20230830/C57BL6J-638850-log2.h5ad")
+    adata, gene, cell_extended, cluster_details, cluster_colors = preprocessing.load_data()
+    # adata = sc.read_h5ad(DATADIR / "expression_matrices/MERFISH-C57BL6J-638850/20230830/C57BL6J-638850-log2.h5ad")
     grn_data = pd.read_csv(DATADIR / "GRN/trrust_mouse.tsv", sep="\t", header=None, 
                         names=["TF", "Target", "Interaction", "PMID"])
     # TF: Transcription factor.
@@ -62,7 +64,7 @@ def map_grn():
 
     # Save grn_data to a TSV file"
     grn_data.to_csv(INTERDATADIR / "grn_mapped.tsv", sep="\t", index=False)
-    return grn_data
+    return adata, gene, cell_extended, cluster_details
 
     # Map regulatory network data to adata.var based on 'Target_id'
     # adata.var["Regulatory_TF"] = adata.var.index.map(grn_data.set_index("Target_id")["TF"])

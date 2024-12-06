@@ -9,7 +9,7 @@ import scanpy as sc
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
 from scipy import sparse
 
-from .config import *
+from config import *
 
 
 def print_column_info(df):

@@ -11,6 +11,8 @@ import pickle
 from tqdm import tqdm
 from itertools import combinations
 from concurrent.futures import ProcessPoolExecutor
+import preprocessing
+from itertools import combinations
 
 from config import *
 
@@ -34,8 +36,19 @@ def process_cell_pairs(ligand_idx, receptor_idx, cell_pairs):
 binding_data_file = Path(HOMEDIR) / "UploadData/mouse_lr_pair.txt"
 protein_ligand_data = pd.read_csv(binding_data_file, sep="\t")
 
+adata, gene, cell_extended, cluster_details, cluster_colors = preprocessing.load_data()
 adata = sc.read_h5ad((DATADIR /"Intermediate/merfish_w_ppi.h5ad"))
+print(cell_extended.columns)
+nan_counts = cell_extended[["x", "y", "z"]].isnull().sum()
+
+# Print the results
+print("Number of NaN values in each column:")
+print(nan_counts)
 # print(adata.var.index[0])
+common_cells = adata.obs.index.intersection(cell_extended.index)
+adata = adata[common_cells].copy()
+print(f"New shape of adata: {adata.shape}")
+
 adata_genes = set(adata.var.index)
 
 # Filter protein-ligand interactions based on gene symbols
@@ -49,6 +62,91 @@ print(f"Filtered protein-ligand interactions: {protein_ligand_data.shape}")
 
 # print(adata.var["gene_symbol"].head())
 # print(adata.var)
+
+#### set brain section ###
+# Perform the join on 'brain_section_label'
+# Rename overlapping columns in cell_extended
+cell_extended = cell_extended.rename(
+    columns={"brain_section_label": "brain_section_label_extended"}
+)
+
+# Join metadata with AnnData
+adata.obs = adata.obs.join(cell_extended, how="left")
+# adata.obs = adata.obs.dropna(subset=["x", "y", "z"]) 
+
+# print(adata.obs.head())
+# Get min and max values for each coordinate
+x_min, x_max = adata.obs["x"].min(), adata.obs["x"].max()
+y_min, y_max = adata.obs["y"].min(), adata.obs["y"].max()
+z_min, z_max = adata.obs["z"].min(), adata.obs["z"].max()
+
+# Define bins
+padding = 1e-6  # Small padding to include edge cases
+x_bins = np.linspace(x_min - padding, x_max + padding, 5)
+y_bins = np.linspace(y_min - padding, y_max + padding, 5)
+z_bins = np.linspace(z_min - padding, z_max + padding, 5)
+# Perform binning
+adata.obs["x_bin"] = pd.cut(adata.obs["x"], bins=x_bins, labels=range(4))
+adata.obs["y_bin"] = pd.cut(adata.obs["y"], bins=y_bins, labels=range(4))
+adata.obs["z_bin"] = pd.cut(adata.obs["z"], bins=z_bins, labels=range(4))
+
+# Check for NaN values in bins
+# print(f"x_bin NaNs: {adata.obs['x_bin'].isnull().sum()}")
+# print(f"y_bin NaNs: {adata.obs['y_bin'].isnull().sum()}")
+# print(f"z_bin NaNs: {adata.obs['z_bin'].isnull().sum()}")
+
+# Convert bin labels to strings and construct the section labels
+adata.obs["section"] = (
+    adata.obs["x_bin"].astype(str) + "_" +
+    adata.obs["y_bin"].astype(str) + "_" +
+    adata.obs["z_bin"].astype(str)
+)
+
+# Verify the section labels
+# print(adata.obs["section"].head())
+# cell_label
+# 1015221640100570404    1_2_0
+# 1015221640100800173    2_2_0
+# 1015221640100360300    1_2_0
+# 1015221640100800090    2_2_0
+# 1015221640100810318    2_2_0
+
+# Verify section assignment
+# print(adata.obs["section"].value_counts())
+# print(adata.obs.head())
+
+
+###### MAHATTEN THRESHOLD ######
+# # Inspect the range of spatial coordinates
+# print(f"x range: {adata.obs['x'].min()} to {adata.obs['x'].max()}")
+# print(f"y range: {adata.obs['y'].min()} to {adata.obs['y'].max()}")
+# print(f"z range: {adata.obs['z'].min()} to {adata.obs['z'].max()}")
+# import numpy as np
+# from itertools import combinations
+
+# # Get spatial coordinates
+# coords = adata.obs[["x", "y", "z"]].values
+
+# # Sample 1000 random pairs of cells
+# random_pairs = np.random.choice(range(len(coords)), size=(1000, 2), replace=False)
+# distances = [np.sum(np.abs(coords[i] - coords[j])) for i, j in random_pairs]
+
+# # Inspect statistics of the distances
+# print(f"Manhattan distances: min={np.min(distances)}, max={np.max(distances)}, mean={np.mean(distances)}, median={np.median(distances)}")
+# # Set threshold based on percentiles
+# threshold_25 = np.percentile(distances, 25)  # 25th percentile
+# threshold_50 = np.percentile(distances, 50)  # Median
+# threshold_75 = np.percentile(distances, 75)  # 75th percentile
+
+# print(f"Suggested thresholds: 25th percentile={threshold_25}, median={threshold_50}, 75th percentile={threshold_75}")
+# x range: 0.4609526242692965 to 10.632294059799506
+# y range: 1.386056075501612 to 9.274293635507194
+# z range: 0.0 to 15.0
+# Manhattan distances: min=0.09056093737691917, max=18.19045663947075, mean=7.8915637805290695, median=7.639213171270928
+# Suggested thresholds: 25th percentile=5.447948535439315, median=7.639213171270928, 75th percentile=10.142603834729846	
+    # •	25th Percentile:  5.45  – Use for selecting close interactions.
+	# •	Median:  7.64  – Balances between close and broader interactions.
+	# •	75th Percentile:  10.14  – Includes a broader range of interactions.
 
 
 cell_metadata_file = DATADIR / "metadata/MERFISH-C57BL6J-638850/20241115/cell_metadata.csv"
@@ -65,6 +163,8 @@ brain_section_groups = adata.obs.groupby("brain_section_label")
 # Create a dictionary to store AnnData for each brain section
 brain_section_adata = {}
 
+manhattan_threshold = 7.64  
+
 for brain_section, indices in brain_section_groups.groups.items():
     brain_section_adata[brain_section] = adata[indices].copy()
     print(f"Created AnnData for brain section '{brain_section}' with {brain_section_adata[brain_section].n_obs} cells.")
@@ -74,35 +174,130 @@ for brain_section, indices in brain_section_groups.groups.items():
 brain_section_graphs = {}
 
 for brain_section in brain_section_adata:
-    # Initialize a graph for this brain section
-    G = nx.Graph()
-    
-    # adata_section = brain_section_adata[brain_section] # adata for this brain section
     adata_section = brain_section_adata['C57BL6J-638850.69'] # adata for this brain section
-    expression_matrix = adata_section.X
-    # Add nodes (cells) with metadata as attributes
-    cell_ids = adata_section.obs.index.tolist()
-    adata_genes_section = set(adata_section.var.index)
-
-    cell_pairs = list(combinations(range(len(cell_ids)), 2))
-
-    # Filter protein-ligand interactions based on gene symbols
-    filtered_protein_ligand_data = protein_ligand_data[
-        (protein_ligand_data["ligand_ensembl_gene_id"].isin(adata_genes_section)) &
-        (protein_ligand_data["receptor_ensembl_gene_id"].isin(adata_genes_section))
-    ]
-
-    for cell_idx, cell_id in enumerate(cell_ids):
-        # Average gene expression for each cell
-        avg_expression = np.mean(expression_matrix[cell_idx, :].toarray())  # Use `.toarray()` if sparse
-        G.add_node(cell_id, average_expression=avg_expression)
+    section_graphs = {}
+    spatial_section_groups = adata_section.obs.groupby("section")
+    spatial_section_adata = {}
+    for spatial_section, indices in spatial_section_groups.groups.items():
+        spatial_section_adata[spatial_section] = adata_section[indices].copy()
+        print(f"Created AnnData for spatial section '{spatial_section}' with {spatial_section_adata[spatial_section].n_obs} cells.")
 
 
-    # Map gene names to column indices in the expression matrix
-    gene_to_idx = {gene: idx for idx, gene in enumerate(adata_section.var["gene_symbol"])}
-    gene_id_to_symbol = dict(zip(adata_section.var.index, adata_section.var["gene_symbol"]))
+    for section_label in spatial_section_adata:
+        print(f"Processing section: {section_label}")
+        adata_spatial = spatial_section_adata[section_label]
+        # Initialize a graph for this brain section
+        G = nx.Graph()
+    
+        # adata_section = brain_section_adata[brain_section] # adata for this brain section
+        expression_matrix = adata_spatial.X
+        # Add nodes (cells) with metadata as attributes
+        cell_ids = adata_spatial.obs.index.tolist()
+        adata_genes_spatial = set(adata_spatial.var.index)
 
-    # # Process each ligand-receptor pair
+        # cell_pairs = list(combinations(range(len(cell_ids)), 2))
+        cell_pairs = []
+        for i, j in combinations(range(len(cell_ids)), 2):
+            coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
+            coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
+            manhattan_distance = np.sum(np.abs(coord1 - coord2))
+
+            if manhattan_distance <= manhattan_threshold:
+                cell_pairs.append((i, j))
+
+        # Filter protein-ligand interactions based on gene symbols
+        filtered_protein_ligand_data = protein_ligand_data[
+            (protein_ligand_data["ligand_ensembl_gene_id"].isin(adata_genes_spatial)) &
+            (protein_ligand_data["receptor_ensembl_gene_id"].isin(adata_genes_spatial))
+        ]
+
+        for cell_idx, cell_id in enumerate(cell_ids):
+            # Average gene expression for each cell
+            avg_expression = np.mean(expression_matrix[cell_idx, :].toarray())  # Use `.toarray()` if sparse
+            G.add_node(cell_id, average_expression=avg_expression)
+
+
+        # Map gene names to column indices in the expression matrix
+        gene_to_idx = {gene: idx for idx, gene in enumerate(adata_spatial.var["gene_symbol"])}
+        gene_id_to_symbol = dict(zip(adata_spatial.var.index, adata_spatial.var["gene_symbol"]))
+
+
+        # Add ligand-receptor edges
+        for _, row in tqdm(filtered_protein_ligand_data.iterrows()):
+            ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
+            receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
+
+            ligand_idx = gene_to_idx.get(ligand_gene)
+            receptor_idx = gene_to_idx.get(receptor_gene)
+
+            # Add edges for ligand-receptor coexpression
+            if ligand_idx is not None and receptor_idx is not None:
+                # Extract ligand and receptor expression vectors for all cells
+                ligand_expr = expression_matrix[:, ligand_idx].toarray().flatten()
+                receptor_expr = expression_matrix[:, receptor_idx].toarray().flatten()
+
+                # Create a boolean mask for valid ligand-receptor coexpression
+                expr_mask = np.outer(ligand_expr > 0, receptor_expr > 0)
+
+                # Iterate through valid cell pairs
+                for i, j in tqdm(cell_pairs, desc="Cell Pairs"):
+                    if expr_mask[i, j]:  # Both ligand and receptor expressed
+                        coexpression_score = ligand_expr[i] * receptor_expr[j]
+                        G.add_edge(cell_ids[i], cell_ids[j], weight=coexpression_score, type="ligand-receptor")
+                    # Add spatial distance edge
+                    coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
+                    coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
+                    manhattan_distance = np.sum(np.abs(coord1 - coord2))
+                    G.add_edge(cell1, cell2, weight=1 / manhattan_distance, type="spatial")
+
+
+                # for i, j in tqdm(cell_pairs, desc="Cell Pairs"):
+                #     cell1, cell2 = cell_ids[i], cell_ids[j]
+
+                #     # # Calculate Manhattan distance between cells
+                #     # coord1 = adata_spatial.obs.loc[cell1, ["x", "y", "z"]].values
+                #     # coord2 = adata_spatial.obs.loc[cell2, ["x", "y", "z"]].values
+                #     # manhattan_distance = np.sum(np.abs(coord1 - coord2))
+
+                #     # # Skip cell pairs that exceed the Manhattan distance threshold
+                #     # if manhattan_distance > manhattan_threshold:
+                #     #     continue
+
+                #     # Add ligand-receptor coexpression edge
+                #     ligand_expr = expression_matrix[i, ligand_idx]
+                #     receptor_expr = expression_matrix[j, receptor_idx]
+
+                #     if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
+                #         coexpression_score = ligand_expr * receptor_expr
+                #         G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
+
+                #     # Add spatial distance edge
+                #     spatial_distance = np.linalg.norm(coord1 - coord2)  # Euclidean distance
+                #     G.add_edge(cell1, cell2, weight=1 / spatial_distance, type="spatial")
+
+                # for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
+                #     for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
+                #         if i != j:  # Exclude self-loops
+                #             ligand_expr = expression_matrix[i, ligand_idx]
+                #             receptor_expr = expression_matrix[j, receptor_idx]
+
+                #             if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
+                #                 coexpression_score = ligand_expr * receptor_expr
+                #                 G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
+        brain_section = 'C57BL6J-638850.69'
+        output_path_1 = Path(GRAPHOUTDIR) / "cell_ligand_receptor_graph.gpickle"
+        output_path = Path(GRAPHOUTDIR) / f"{brain_section}_{section_label}_cell_ligand_receptor_graph.gpickle"
+        os.makedirs(output_path, exist_ok=True)
+        os.makedirs(output_path_1, exist_ok=True)
+
+        with open(output_path_1, "wb") as f:
+            pickle.dump(G, f) 
+        with open(output_path, "wb") as f:
+            pickle.dump(G, f) 
+
+        break
+
+            # # Process each ligand-receptor pair
     # all_edges = []
     # with ProcessPoolExecutor() as executor:
     #     futures = []
@@ -122,32 +317,6 @@ for brain_section in brain_section_adata:
     # # Add edges to the graph
     # for cell1, cell2, weight in all_edges:
     #     G.add_edge(cell1, cell2, weight=weight, type="ligand-receptor")
-
-    # Add ligand-receptor edges
-    for _, row in tqdm(filtered_protein_ligand_data.iterrows()):
-        ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
-        receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
-
-        ligand_idx = gene_to_idx.get(ligand_gene)
-        receptor_idx = gene_to_idx.get(receptor_gene)
-
-        # Add edges for ligand-receptor coexpression
-        if ligand_idx is not None and receptor_idx is not None:
-            for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
-                for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
-                    if i != j:  # Exclude self-loops
-                        ligand_expr = expression_matrix[i, ligand_idx]
-                        receptor_expr = expression_matrix[j, receptor_idx]
-
-                        if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
-                            coexpression_score = ligand_expr * receptor_expr
-                            G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
-
-        output_path = Path(DATADIR) / "cell_ligand_receptor_graph.gpickle"
-        with open(output_path, "wb") as f:
-            pickle.dump(G, f)
-        
-        break
 
 # print(f"Graph saved to {output_path}")
 
@@ -319,3 +488,30 @@ for brain_section in brain_section_adata:
 # print(ppi_data.head())
 
 
+"""
+seperate adata into brain sections
+seprate adata into 4 * 4 * 4 spatial section
+
+for each brain section, for each spatail section construct a graph
+Nodes:
+	•	Represent cells with their average gene expression as a feature.
+Edges:
+	•	Ligand-receptor coexpression edges are added only if:
+	•	The Manhattan distance is within the threshold.
+	•	Both ligand and receptor genes are expressed in the respective cells.
+	•	Spatial proximity edges are added using Manhattan distance.
+
+
+Mahattan distance threshold: 7.64
+
+x range: 0.4609526242692965 to 10.632294059799506
+y range: 1.386056075501612 to 9.274293635507194
+z range: 0.0 to 15.0
+Manhattan distances: min=0.09056093737691917, max=18.19045663947075, mean=7.8915637805290695, median=7.639213171270928
+Suggested thresholds: 25th percentile=5.447948535439315, median=7.639213171270928, 75th percentile=10.142603834729846	
+    •	25th Percentile:  5.45  – Use for selecting close interactions.
+	•	Median:  7.64  – Balances between close and broader interactions.
+	•	75th Percentile:  10.14  – Includes a broader range of interactions
+
+
+"""
