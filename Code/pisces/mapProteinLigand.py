@@ -77,7 +77,8 @@ for brain_section in brain_section_adata:
     # Initialize a graph for this brain section
     G = nx.Graph()
     
-    adata_section = brain_section_adata[brain_section] # adata for this brain section
+    # adata_section = brain_section_adata[brain_section] # adata for this brain section
+    adata_section = brain_section_adata['C57BL6J-638850.69'] # adata for this brain section
     expression_matrix = adata_section.X
     # Add nodes (cells) with metadata as attributes
     cell_ids = adata_section.obs.index.tolist()
@@ -101,46 +102,46 @@ for brain_section in brain_section_adata:
     gene_to_idx = {gene: idx for idx, gene in enumerate(adata_section.var["gene_symbol"])}
     gene_id_to_symbol = dict(zip(adata_section.var.index, adata_section.var["gene_symbol"]))
 
-    # Process each ligand-receptor pair
-    all_edges = []
-    with ProcessPoolExecutor() as executor:
-        futures = []
-        for _, row in tqdm(filtered_protein_ligand_data.iterrows(), desc="Processing ligand-receptor pairs"):
-            ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
-            receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
+    # # Process each ligand-receptor pair
+    # all_edges = []
+    # with ProcessPoolExecutor() as executor:
+    #     futures = []
+    #     for _, row in tqdm(filtered_protein_ligand_data.iterrows(), desc="Processing ligand-receptor pairs"):
+    #         ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
+    #         receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
 
-            ligand_idx = gene_to_idx.get(ligand_gene)
-            receptor_idx = gene_to_idx.get(receptor_gene)
+    #         ligand_idx = gene_to_idx.get(ligand_gene)
+    #         receptor_idx = gene_to_idx.get(receptor_gene)
 
-            if ligand_idx is not None and receptor_idx is not None:
-                futures.append(executor.submit(process_cell_pairs, ligand_idx, receptor_idx, cell_pairs))
+    #         if ligand_idx is not None and receptor_idx is not None:
+    #             futures.append(executor.submit(process_cell_pairs, ligand_idx, receptor_idx, cell_pairs))
 
-        for future in tqdm(futures, desc="Collecting results"):
-            all_edges.extend(future.result())
+    #     for future in tqdm(futures, desc="Collecting results"):
+    #         all_edges.extend(future.result())
 
-    # Add edges to the graph
-    for cell1, cell2, weight in all_edges:
-        G.add_edge(cell1, cell2, weight=weight, type="ligand-receptor")
+    # # Add edges to the graph
+    # for cell1, cell2, weight in all_edges:
+    #     G.add_edge(cell1, cell2, weight=weight, type="ligand-receptor")
 
-    # # Add ligand-receptor edges
-    # for _, row in tqdm(filtered_protein_ligand_data.iterrows()):
-    #     ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
-    #     receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
+    # Add ligand-receptor edges
+    for _, row in tqdm(filtered_protein_ligand_data.iterrows()):
+        ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
+        receptor_gene = gene_id_to_symbol.get(row["receptor_ensembl_gene_id"])
 
-    #     ligand_idx = gene_to_idx.get(ligand_gene)
-    #     receptor_idx = gene_to_idx.get(receptor_gene)
+        ligand_idx = gene_to_idx.get(ligand_gene)
+        receptor_idx = gene_to_idx.get(receptor_gene)
 
-    #     # Add edges for ligand-receptor coexpression
-    #     if ligand_idx is not None and receptor_idx is not None:
-    #         for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
-    #             for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
-    #                 if i != j:  # Exclude self-loops
-    #                     ligand_expr = expression_matrix[i, ligand_idx]
-    #                     receptor_expr = expression_matrix[j, receptor_idx]
+        # Add edges for ligand-receptor coexpression
+        if ligand_idx is not None and receptor_idx is not None:
+            for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
+                for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
+                    if i != j:  # Exclude self-loops
+                        ligand_expr = expression_matrix[i, ligand_idx]
+                        receptor_expr = expression_matrix[j, receptor_idx]
 
-    #                     if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
-    #                         coexpression_score = ligand_expr * receptor_expr
-    #                         G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
+                        if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
+                            coexpression_score = ligand_expr * receptor_expr
+                            G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
 
         output_path = Path(DATADIR) / "cell_ligand_receptor_graph.gpickle"
         with open(output_path, "wb") as f:
