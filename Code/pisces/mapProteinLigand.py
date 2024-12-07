@@ -537,7 +537,7 @@ Edges:
 	•	Spatial proximity edges are added using Manhattan distance.
 
 
-Mahattan distance threshold: 7.64
+Mahattan distance threshold: 5.45 
 
 x range: 0.4609526242692965 to 10.632294059799506
 y range: 1.386056075501612 to 9.274293635507194
