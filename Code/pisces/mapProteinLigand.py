@@ -38,16 +38,38 @@ protein_ligand_data = pd.read_csv(binding_data_file, sep="\t")
 
 adata, gene, cell_extended, cluster_details, cluster_colors = preprocessing.load_data()
 adata = sc.read_h5ad((DATADIR /"Intermediate/merfish_w_ppi.h5ad"))
-print(cell_extended.columns)
+print(adata.var.shape)
+# print(cell_extended.columns)
+
+grn_data = pd.read_csv(INTERDATADIR / "grn_mapped.tsv", sep="\t")
+print(grn_data.head())
+
+tf_target_gene_ids = set(grn_data["TF_id"]).union(set(grn_data["Target_id"]))
+
+# Filter adata to include only the relevant genes
+filtered_genes = adata.var.index.intersection(tf_target_gene_ids)
+
+# Check the number of matching genes
+print(f"Number of matching genes in adata: {len(filtered_genes)}")
+
+# Subset the adata object
+adata = adata[:, filtered_genes].copy()
+
+# Verify the new shape of adata
+print(f"New shape of adata_grn: {adata.shape}")
+
+
+
+
 nan_counts = cell_extended[["x", "y", "z"]].isnull().sum()
 
 # Print the results
-print("Number of NaN values in each column:")
-print(nan_counts)
+# print("Number of NaN values in each column:")
+# print(nan_counts)
 # print(adata.var.index[0])
 common_cells = adata.obs.index.intersection(cell_extended.index)
 adata = adata[common_cells].copy()
-print(f"New shape of adata: {adata.shape}")
+# print(f"New shape of adata: {adata.shape}")
 
 adata_genes = set(adata.var.index)
 
@@ -58,7 +80,7 @@ protein_ligand_data = protein_ligand_data[
 ]
 
 print(f"Filtered protein-ligand interactions: {protein_ligand_data.shape}")
-#print(protein_ligand_data)
+# print(protein_ligand_data)
 
 # print(adata.var["gene_symbol"].head())
 # print(adata.var)
@@ -163,7 +185,7 @@ brain_section_groups = adata.obs.groupby("brain_section_label")
 # Create a dictionary to store AnnData for each brain section
 brain_section_adata = {}
 
-manhattan_threshold = 7.64  
+manhattan_threshold = 5.45  
 
 for brain_section, indices in brain_section_groups.groups.items():
     brain_section_adata[brain_section] = adata[indices].copy()
@@ -177,6 +199,7 @@ for brain_section in brain_section_adata:
     adata_section = brain_section_adata['C57BL6J-638850.69'] # adata for this brain section
     section_graphs = {}
     spatial_section_groups = adata_section.obs.groupby("section")
+
     spatial_section_adata = {}
     for spatial_section, indices in spatial_section_groups.groups.items():
         spatial_section_adata[spatial_section] = adata_section[indices].copy()
@@ -195,15 +218,15 @@ for brain_section in brain_section_adata:
         cell_ids = adata_spatial.obs.index.tolist()
         adata_genes_spatial = set(adata_spatial.var.index)
 
-        # cell_pairs = list(combinations(range(len(cell_ids)), 2))
-        cell_pairs = []
-        for i, j in combinations(range(len(cell_ids)), 2):
-            coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
-            coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
-            manhattan_distance = np.sum(np.abs(coord1 - coord2))
+        cell_pairs = list(combinations(range(len(cell_ids)), 2))
+        # cell_pairs = []
+        # for i, j in combinations(range(len(cell_ids)), 2):
+        #     coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
+        #     coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
+        #     manhattan_distance = np.sum(np.abs(coord1 - coord2))
 
-            if manhattan_distance <= manhattan_threshold:
-                cell_pairs.append((i, j))
+        #     if manhattan_distance <= manhattan_threshold:
+        #         cell_pairs.append((i, j))
 
         # Filter protein-ligand interactions based on gene symbols
         filtered_protein_ligand_data = protein_ligand_data[
@@ -221,7 +244,7 @@ for brain_section in brain_section_adata:
         gene_to_idx = {gene: idx for idx, gene in enumerate(adata_spatial.var["gene_symbol"])}
         gene_id_to_symbol = dict(zip(adata_spatial.var.index, adata_spatial.var["gene_symbol"]))
 
-
+        i = 0
         # Add ligand-receptor edges
         for _, row in tqdm(filtered_protein_ligand_data.iterrows()):
             ligand_gene = gene_id_to_symbol.get(row["ligand_ensembl_gene_id"])
@@ -232,70 +255,81 @@ for brain_section in brain_section_adata:
 
             # Add edges for ligand-receptor coexpression
             if ligand_idx is not None and receptor_idx is not None:
-                # Extract ligand and receptor expression vectors for all cells
-                ligand_expr = expression_matrix[:, ligand_idx].toarray().flatten()
-                receptor_expr = expression_matrix[:, receptor_idx].toarray().flatten()
+                # # Extract ligand and receptor expression vectors for all cells
+                # ligand_expr = expression_matrix[:, ligand_idx].toarray().flatten()
+                # receptor_expr = expression_matrix[:, receptor_idx].toarray().flatten()
 
-                # Create a boolean mask for valid ligand-receptor coexpression
-                expr_mask = np.outer(ligand_expr > 0, receptor_expr > 0)
+                # # Create a boolean mask for valid ligand-receptor coexpression
+                # expr_mask = np.outer(ligand_expr > 0, receptor_expr > 0)
 
-                # Iterate through valid cell pairs
-                for i, j in tqdm(cell_pairs, desc="Cell Pairs"):
-                    if expr_mask[i, j]:  # Both ligand and receptor expressed
-                        coexpression_score = ligand_expr[i] * receptor_expr[j]
-                        G.add_edge(cell_ids[i], cell_ids[j], weight=coexpression_score, type="ligand-receptor")
-                    # Add spatial distance edge
-                    coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
-                    coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
-                    manhattan_distance = np.sum(np.abs(coord1 - coord2))
-                    G.add_edge(cell1, cell2, weight=1 / manhattan_distance, type="spatial")
-
-
+                # # Iterate through valid cell pairs
                 # for i, j in tqdm(cell_pairs, desc="Cell Pairs"):
-                #     cell1, cell2 = cell_ids[i], cell_ids[j]
-
-                #     # # Calculate Manhattan distance between cells
-                #     # coord1 = adata_spatial.obs.loc[cell1, ["x", "y", "z"]].values
-                #     # coord2 = adata_spatial.obs.loc[cell2, ["x", "y", "z"]].values
-                #     # manhattan_distance = np.sum(np.abs(coord1 - coord2))
-
-                #     # # Skip cell pairs that exceed the Manhattan distance threshold
-                #     # if manhattan_distance > manhattan_threshold:
-                #     #     continue
-
-                #     # Add ligand-receptor coexpression edge
-                #     ligand_expr = expression_matrix[i, ligand_idx]
-                #     receptor_expr = expression_matrix[j, receptor_idx]
-
-                #     if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
-                #         coexpression_score = ligand_expr * receptor_expr
-                #         G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
-
+                #     if expr_mask[i, j]:  # Both ligand and receptor expressed
+                #         coexpression_score = ligand_expr[i] * receptor_expr[j]
+                #         G.add_edge(cell_ids[i], cell_ids[j], weight=coexpression_score, type="ligand-receptor")
                 #     # Add spatial distance edge
-                #     spatial_distance = np.linalg.norm(coord1 - coord2)  # Euclidean distance
-                #     G.add_edge(cell1, cell2, weight=1 / spatial_distance, type="spatial")
+                #     coord1 = adata_spatial.obs.loc[cell_ids[i], ["x", "y", "z"]].values
+                #     coord2 = adata_spatial.obs.loc[cell_ids[j], ["x", "y", "z"]].values
+                #     manhattan_distance = np.sum(np.abs(coord1 - coord2))
+                #     G.add_edge(cell1, cell2, weight=1 / manhattan_distance, type="spatial")
 
-                # for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
-                #     for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
-                #         if i != j:  # Exclude self-loops
-                #             ligand_expr = expression_matrix[i, ligand_idx]
-                #             receptor_expr = expression_matrix[j, receptor_idx]
 
-                #             if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
-                #                 coexpression_score = ligand_expr * receptor_expr
-                #                 G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
+                for i, j in tqdm(cell_pairs, desc="Cell Pairs"):
+                    cell1, cell2 = cell_ids[i], cell_ids[j]
+
+                    # Calculate Manhattan distance between cells
+                    coord1 = adata_spatial.obs.loc[cell1, ["x", "y", "z"]].values
+                    coord2 = adata_spatial.obs.loc[cell2, ["x", "y", "z"]].values
+                    manhattan_distance = np.sum(np.abs(coord1 - coord2))
+
+                    # Skip cell pairs that exceed the Manhattan distance threshold
+                    if manhattan_distance > manhattan_threshold:
+                        continue
+                    
+                    # if expr_mask[i, j]:  # Both ligand and receptor expressed
+                    #     coexpression_score = ligand_expr[i] * receptor_expr[j]
+                    #     t = "ligand-receptor" + row["lr_pair"]
+                    #     G.add_edge(cell_ids[i], cell_ids[j], weight=coexpression_score, type=t)
+
+                    # Add ligand-receptor coexpression edge
+                    ligand_expr = expression_matrix[i, ligand_idx]
+                    receptor_expr = expression_matrix[j, receptor_idx]
+
+                    if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
+                        coexpression_score = ligand_expr * receptor_expr
+                        t = "ligand-receptor_" + row["lr_pair"]
+                        G.add_edge(cell1, cell2, weight=coexpression_score, type=t)
+                        #print(f"Added edge between {cell1} and {cell2} with weight {coexpression_score} and type {t}")
+
+                    # Add spatial distance edge
+                    if i == 0:
+                        manhattan_distance = np.sum(np.abs(coord1 - coord2))
+                        G.add_edge(cell1, cell2, weight=1 / manhattan_distance, type="spatial")
+                i += 1
+
+        #         # for i, cell1 in tqdm(enumerate(cell_ids), desc="Cell1 loop"):
+        #         #     for j, cell2 in tqdm(enumerate(cell_ids), desc="Cell2 loop"):
+        #         #         if i != j:  # Exclude self-loops
+        #         #             ligand_expr = expression_matrix[i, ligand_idx]
+        #         #             receptor_expr = expression_matrix[j, receptor_idx]
+
+        #         #             if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
+        #         #                 coexpression_score = ligand_expr * receptor_expr
+        #         #                 G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
         brain_section = 'C57BL6J-638850.69'
-        output_path_1 = Path(GRAPHOUTDIR) / "cell_ligand_receptor_graph.gpickle"
+        # output_path_1 = Path(GRAPHOUTDIR) / "cell_ligand_receptor_graph.gpickle"
         output_path = Path(GRAPHOUTDIR) / f"{brain_section}_{section_label}_cell_ligand_receptor_graph.gpickle"
-        os.makedirs(output_path, exist_ok=True)
-        os.makedirs(output_path_1, exist_ok=True)
+        # os.makedirs(output_path, exist_ok=True)
+        # os.makedirs(output_path_1, exist_ok=True)
 
-        with open(output_path_1, "wb") as f:
-            pickle.dump(G, f) 
+        # with open(output_path_1, "wb") as f:
+        #     pickle.dump(G, f) 
         with open(output_path, "wb") as f:
             pickle.dump(G, f) 
-
         break
+    break
+
+        
 
             # # Process each ligand-receptor pair
     # all_edges = []
