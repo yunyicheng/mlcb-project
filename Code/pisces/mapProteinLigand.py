@@ -196,7 +196,8 @@ for brain_section, indices in brain_section_groups.groups.items():
 brain_section_graphs = {}
 
 for brain_section in brain_section_adata:
-    adata_section = brain_section_adata['C57BL6J-638850.69'] # adata for this brain section
+    adata_section = brain_section_adata[brain_section]
+    # adata_section = brain_section_adata['C57BL6J-638850.69'] # adata for this brain section
     section_graphs = {}
     spatial_section_groups = adata_section.obs.groupby("section")
 
@@ -316,7 +317,7 @@ for brain_section in brain_section_adata:
         #         #             if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
         #         #                 coexpression_score = ligand_expr * receptor_expr
         #         #                 G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
-        brain_section = 'C57BL6J-638850.69'
+        # brain_section = 'C57BL6J-638850.69'
         # output_path_1 = Path(GRAPHOUTDIR) / "cell_ligand_receptor_graph.gpickle"
         output_path = Path(GRAPHOUTDIR) / f"{brain_section}_{section_label}_cell_ligand_receptor_graph.gpickle"
         # os.makedirs(output_path, exist_ok=True)
@@ -326,8 +327,8 @@ for brain_section in brain_section_adata:
         #     pickle.dump(G, f) 
         with open(output_path, "wb") as f:
             pickle.dump(G, f) 
-        break
-    break
+    #     break
+    # break
 
         
 
