@@ -1,16 +1,23 @@
 import os
+import sys
 
+# import pisces.mapGRN as mapGRN
+import pisces.mapProteinLigand as mapPL
+
+# import pisces.preprocessing as prep
 from pisces.config import *
-import pisces.preprocessing as prep
-import pisces.mapGRN as mapGRN
+from pisces.train import *
 
 
 def main():
-    prep.load_data()
-    
-    os.makedirs(INTERDATADIR, exist_ok=True)
+    # if len(sys.argv) < 2:
+    #     print("Usage: python3 main.py <value>")
+    #     sys.exit(1)
 
-    mapGRN.map_grn()
+    # # Access the argument
+    # value = int(sys.argv[1])  # Convert to integer
+    # mapPL.mapProteinLigand(value)
+    train_model()
 
 
 if __name__ == "__main__":
