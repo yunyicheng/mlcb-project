@@ -17,7 +17,8 @@ def main():
     # # Access the argument
     # value = int(sys.argv[1])  # Convert to integer
     # mapPL.mapProteinLigand(value)
-    train_model()
+    model = train_model()
+    torch.save(model, OUTDIR / "final_model.pt")
 
 
 if __name__ == "__main__":
