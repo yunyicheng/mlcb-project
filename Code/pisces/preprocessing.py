@@ -6,8 +6,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import scipy.sparse as sp
+import torch
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
-from scipy import sparse
 
 from .config import *
 
@@ -75,3 +76,32 @@ def load_data():
     print("MERFISH data loaded successfully")
 
     return adata, gene, cell_extended, cluster_details, cluster_colors
+
+
+def calculate_node_features(n_top_genes=500):
+    # Identify highly variable genes (if not already selected)
+    adata = adata = sc.read_h5ad(
+        DATADIR
+        / "expression_matrices/MERFISH-C57BL6J-638850/20230830/C57BL6J-638850-log2.h5ad"
+    )
+    if "highly_variable" not in adata.var:
+        sc.pp.highly_variable_genes(adata, n_top_genes=n_top_genes)
+        # Save the data
+        adata.write(DATADIR / "expression_matrices/merfish_processed.h5ad")
+
+    # Subset the data to highly variable genes
+    adata = adata[:, adata.var.highly_variable]
+
+    # Extract the expression matrix for node features
+    node_features = adata.X
+    # Convert to a dense tensor if sparse
+    if isinstance(node_features, np.ndarray):
+        node_features_tensor = torch.tensor(node_features, dtype=torch.float)
+    else:  # If sparse, convert to dense first
+        node_features_tensor = torch.tensor(node_features.toarray(), dtype=torch.float)
+
+    # Save to pickle
+    with open(OUTDIR / "nodeFeature.pkl", "wb") as f:
+        torch.save(node_features_tensor, f)
+
+    return node_features_tensor
