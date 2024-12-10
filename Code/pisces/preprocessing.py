@@ -9,7 +9,7 @@ import scanpy as sc
 from abc_atlas_access.abc_atlas_cache.abc_project_cache import AbcProjectCache
 from scipy import sparse
 
-from config import *
+from .config import *
 
 
 def print_column_info(df):
@@ -37,6 +37,7 @@ def plot_section(xx, yy, cc=None, val=None, fig_width=8, fig_height=8, cmap=None
 
 
 def load_data():
+    print("Loading MERFISH data")
     download_base = Path(DATADIR)
     abc_cache = AbcProjectCache.from_cache_dir(download_base)
     cell = abc_cache.get_metadata_dataframe(
@@ -56,6 +57,7 @@ def load_data():
         file_name="cluster_to_cluster_annotation_membership_pivoted",
         keep_default_na=False,
     )
+    print("Here")
     cluster_details.set_index("cluster_alias", inplace=True)
     cluster_colors = abc_cache.get_metadata_dataframe(
         directory="WMB-taxonomy",
@@ -64,10 +66,12 @@ def load_data():
     cluster_colors.set_index("cluster_alias", inplace=True)
     cell_extended = cell.join(cluster_details, on="cluster_alias")
     cell_extended = cell_extended.join(cluster_colors, on="cluster_alias")
-
+    print("Here")
     file = abc_cache.get_data_path(
         directory="MERFISH-C57BL6J-638850", file_name="C57BL6J-638850/log2"
     )
+    print("Here")
     adata = anndata.read_h5ad(file, backed="r")
+    print("MERFISH data loaded successfully")
 
     return adata, gene, cell_extended, cluster_details, cluster_colors

@@ -164,7 +164,8 @@ cython_debug/
 
 # Data and Results
 Data/
-#Results/
+Results/
+HPC_jobs/
 
 # configure file
 config.json
