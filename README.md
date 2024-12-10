@@ -1,4 +1,4 @@
-# Cell-Cell Communication Analysis Using Graph Attention Networks (GAT)
+# Cell-Cell Communication Analysis Using Graph Attention Networks (GAT) and Spatial Transcriptomics Data
 
 ## Overview
 This project uses a **Graph Attention Network (GAT)** to study **cell-cell communication** by predicting coexpression scores for ligand-receptor interactions. By integrating spatial and transcriptomic data, the model captures how spatial relationships influence transcriptional interactions and cell communication.
