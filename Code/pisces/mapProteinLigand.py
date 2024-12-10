@@ -195,6 +195,8 @@ def mapProteinLigand(i):
 
     for section_label in spatial_section_adata:
         print(f"Processing section: {section_label}")
+        if section_label  == '1_1_3':
+            continue
         adata_spatial = spatial_section_adata[section_label]
         # Initialize a graph for this brain section
         G = nx.Graph()
@@ -318,7 +320,7 @@ def mapProteinLigand(i):
         #         #             if ligand_expr > 0 and receptor_expr > 0:  # Check for non-zero expression
         #         #                 coexpression_score = ligand_expr * receptor_expr
         #         #                 G.add_edge(cell1, cell2, weight=coexpression_score, type="ligand-receptor")
-        # brain_section = 'C57BL6J-638850.69'
+        brain_section = 'C57BL6J-638850.69'
         # output_path_1 = Path(GRAPHOUTDIR) / "cell_ligand_receptor_graph.gpickle"
         output_path = (
             Path(GRAPHOUTDIR)
