@@ -5,6 +5,7 @@ from torch_geometric.loader import DataLoader
 
 from .config import *
 from .model import *
+from .preprocessing import *
 
 
 def train_gat_with_spatial_edges(
